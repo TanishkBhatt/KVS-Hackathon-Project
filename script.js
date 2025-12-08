@@ -419,7 +419,7 @@ function runAnalysis() {
     
     // Generate full analysis
     const fullAnalysisText = `
-=== ROUTINE ANALYSIS ===
+ROUTINE ANALYSIS
 
 Total Tasks: ${total}
 Completed: ${completed}
@@ -445,4 +445,5 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {
     init();
+
 }
