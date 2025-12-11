@@ -3,6 +3,28 @@ let currentUser = null;
 let tasks = [];
 let currentView = 'register';
 
+// Validation helpers for stricter auth
+function isValidGmail(email) {
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.[A-Za-z]{2,}$/;
+    return gmailRegex.test(email);
+}
+
+function getPasswordErrors(password) {
+    const errors = [];
+    if (password.length < 8) errors.push('at least 8 characters');
+    if (!/[A-Za-z]/.test(password)) errors.push('one letter');
+    if (!/\d/.test(password)) errors.push('one number');
+    return errors;
+}
+
+function broadcastTasksUpdate() {
+    try {
+        window.dispatchEvent(new CustomEvent('tasksUpdated', { detail: { tasks: [...tasks] } }));
+    } catch (e) {
+        // ignore if CustomEvent not supported
+    }
+}
+
 // DOM Elements
 const registerView = document.getElementById('registerView');
 const dashboardView = document.getElementById('dashboardView');
@@ -177,8 +199,26 @@ function handleRegister() {
     const email = regEmail.value.trim();
     const password = regPassword.value.trim();
     
+    regMessage.style.color = '#f97373';
+
     if (!username || !email || !password) {
         regMessage.textContent = 'Please fill all fields';
+        return;
+    }
+
+    if (username.length < 3) {
+        regMessage.textContent = 'Username must be at least 3 characters';
+        return;
+    }
+
+    if (!isValidGmail(email)) {
+        regMessage.textContent = 'Use a valid Gmail address (example@gmail.com)';
+        return;
+    }
+
+    const pwdErrors = getPasswordErrors(password);
+    if (pwdErrors.length) {
+        regMessage.textContent = `Password must contain ${pwdErrors.join(', ')}`;
         return;
     }
     
@@ -204,9 +244,19 @@ function handleRegister() {
     }, 1000);
 }
 
+let failedLogins = 0;
+let lastLockTime = null;
+
 function handleLogin() {
     const username = loginUsername.value.trim();
     const password = loginPassword.value.trim();
+
+    const now = Date.now();
+    if (lastLockTime && now - lastLockTime < 30_000) {
+        const remaining = Math.ceil((30_000 - (now - lastLockTime)) / 1000);
+        loginMessage.textContent = `Too many attempts. Try again in ${remaining}s`;
+        return;
+    }
     
     if (!username || !password) {
         loginMessage.textContent = 'Please fill all fields';
@@ -217,9 +267,20 @@ function handleLogin() {
     const user = users[username];
     
     if (!user || user.password !== password) {
-        loginMessage.textContent = 'Invalid username or password';
+        failedLogins++;
+        if (failedLogins >= 3) {
+            lastLockTime = Date.now();
+            failedLogins = 0;
+            loginMessage.textContent = 'Too many failed logins. Locked for 30 seconds.';
+        } else {
+            loginMessage.textContent = `Invalid username or password (attempt ${failedLogins}/3)`;
+        }
         return;
     }
+
+    failedLogins = 0;
+    lastLockTime = null;
+    loginMessage.textContent = '';
     
     localStorage.setItem('currentUser', username);
     currentUser = username;
@@ -377,6 +438,7 @@ function updateProgress() {
     if (tasks.length === 0) {
         progressFill.style.width = '0%';
         progressPercent.textContent = '0%';
+        broadcastTasksUpdate();
         return;
     }
     
@@ -385,6 +447,8 @@ function updateProgress() {
     
     progressFill.style.width = `${progress}%`;
     progressPercent.textContent = `${progress}%`;
+
+    broadcastTasksUpdate();
 }
 
 // Notes Management
